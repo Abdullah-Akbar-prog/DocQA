@@ -19,6 +19,13 @@ builder.Services.ConfigureHttpJsonOptions(o =>
     o.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
 builder.Services.AddSwaggerGen();
+
+builder.Services.AddCors(options =>
+    options.AddDefaultPolicy(policy => policy
+        .WithOrigins(builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [])
+        .AllowAnyHeader()
+        .AllowAnyMethod()));
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
