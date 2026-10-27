@@ -1,6 +1,7 @@
 using DocQA;
 using DocQA.Data;
 using DocQA.Features.Documents;
+using DocQA.Features.Search;
 using DocQA.Ingestion;
 using DocQA.Rag;
 using Microsoft.EntityFrameworkCore;
@@ -50,6 +51,8 @@ builder.Services.AddSingleton<IEmbeddingGenerator<string, Embedding<float>>>(sp 
 builder.Services.AddSingleton<ITextExtractor, TextExtractor>();
 builder.Services.AddSingleton<IngestionQueue>();
 builder.Services.AddHostedService<IngestionWorker>();
+builder.Services.AddSingleton<VectorIndex>();
+builder.Services.AddScoped<RetrievalService>();
 
 var app = builder.Build();
 // Configure the HTTP request pipeline.
@@ -63,7 +66,7 @@ app.UseHttpsRedirection();
 app.UseCors();
 app.UseAuthorization();
 app.MapDocumentEndpoints();
-
+app.MapSearchEndpoints();
 
 app.MapControllers();
 
