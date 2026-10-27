@@ -69,8 +69,8 @@ IngestionQueue queue,
                 File.Delete(storagePath); // don't leave an orphan file if the database write fails
                 throw;
             }
-
-            return Results.Created($"/api/documents/{id}", ToDto(doc));
+            await queue.EnqueueAsync(id, ct);
+            return Results.Accepted($"/api/documents/{id}", ToDto(doc));
         }
 
         private static async Task<IResult> List(AppDbContext db, CancellationToken ct) =>
