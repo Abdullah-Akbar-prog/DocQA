@@ -1,4 +1,5 @@
 ﻿using DocQA.Data;
+using DocQA.Ingestion;
 using DocQA.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -28,6 +29,7 @@ namespace DocQA.Features.Documents
             IFormFile file,
             AppDbContext db,
             IWebHostEnvironment env,
+IngestionQueue queue,
             IOptions<StorageOptions> storage,
             CancellationToken ct)
         {

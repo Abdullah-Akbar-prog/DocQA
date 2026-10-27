@@ -6,7 +6,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
 using OllamaSharp;
-using OllamaSharp.Models;
 using System.Text.Json.Serialization;
 using static DocQA.Models.Options;
 
@@ -32,9 +31,10 @@ builder.Services.AddCors(options =>
         .AllowAnyHeader()
         .AllowAnyMethod()));
 
-builder.Services.AddOptions<OllamaOption>().BindConfiguration("Ollama");
+builder.Services.AddOptions<OllamaOptions>().BindConfiguration("Ollama");
 builder.Services.AddOptions<RagOptions>().BindConfiguration("Rag");
 
+// Only this registration knows about Ollama. Everything else uses the IEmbeddingGenerator interface.
 builder.Services.AddSingleton<IEmbeddingGenerator<string, Embedding<float>>>(sp =>
 {
     var ollama = sp.GetRequiredService<IOptions<OllamaOptions>>().Value;
