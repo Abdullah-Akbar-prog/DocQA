@@ -2,6 +2,7 @@ using DocQA;
 using DocQA.Data;
 using DocQA.Features.Documents;
 using DocQA.Ingestion;
+using DocQA.Rag;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
@@ -46,6 +47,7 @@ builder.Services.AddSingleton<IEmbeddingGenerator<string, Embedding<float>>>(sp 
     return new OllamaApiClient(http, ollama.EmbeddingModel);
 });
 
+builder.Services.AddSingleton<ITextExtractor, TextExtractor>();
 builder.Services.AddSingleton<IngestionQueue>();
 builder.Services.AddHostedService<IngestionWorker>();
 
@@ -57,8 +59,8 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.MapDocumentEndpoints();
 app.UseHttpsRedirection();
+app.MapDocumentEndpoints();
 
 app.UseCors();
 app.UseAuthorization();
