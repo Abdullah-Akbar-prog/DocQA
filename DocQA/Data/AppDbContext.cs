@@ -20,9 +20,16 @@ namespace DocQA.Data
                     .OnDelete(DeleteBehavior.Cascade);
             });
 
-            modelBuilder.Entity<Chunk>()
-                .HasIndex(x => new { x.DocumentId, x.Index })
-                .IsUnique();
+            modelBuilder.Entity<Chunk>(e =>
+            {
+                e.Property(x => x.Embedding).HasColumnType("varbinary(max)");
+                e.HasIndex(x => new { x.DocumentId, x.Index }).IsUnique();
+            });
         }
+        /// <summary>Must match the embedding model (nomic-embed-text = 768).</summary>
+        public const int EmbeddingDimensions = 768;
+
     }
 }
+
+
