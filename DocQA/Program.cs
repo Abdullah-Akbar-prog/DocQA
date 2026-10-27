@@ -1,8 +1,14 @@
 using DocQA;
 using DocQA.Data;
 using DocQA.Features.Documents;
+using DocQA.Ingestion;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Options;
+using OllamaSharp;
+using OllamaSharp.Models;
 using System.Text.Json.Serialization;
+using static DocQA.Models.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -25,6 +31,23 @@ builder.Services.AddCors(options =>
         .WithOrigins(builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [])
         .AllowAnyHeader()
         .AllowAnyMethod()));
+
+builder.Services.AddOptions<OllamaOption>().BindConfiguration("Ollama");
+builder.Services.AddOptions<RagOptions>().BindConfiguration("Rag");
+
+builder.Services.AddSingleton<IEmbeddingGenerator<string, Embedding<float>>>(sp =>
+{
+    var ollama = sp.GetRequiredService<IOptions<OllamaOptions>>().Value;
+    var http = new HttpClient
+    {
+        BaseAddress = new Uri(ollama.Endpoint),
+        Timeout = TimeSpan.FromSeconds(ollama.TimeoutSeconds)
+    };
+    return new OllamaApiClient(http, ollama.EmbeddingModel);
+});
+
+builder.Services.AddSingleton<IngestionQueue>();
+builder.Services.AddHostedService<IngestionWorker>();
 
 var app = builder.Build();
 // Configure the HTTP request pipeline.
