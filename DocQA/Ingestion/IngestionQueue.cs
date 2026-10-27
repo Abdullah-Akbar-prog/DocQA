@@ -14,4 +14,7 @@ namespace DocQA.Ingestion
         public IAsyncEnumerable<Guid> ReadAllAsync(CancellationToken ct) =>
                 _channel.Reader.ReadAllAsync(ct);
     }
+
+    /// <summary>A failure that retrying won't fix (empty file, wrong embedding size).</summary>
+    public sealed class IngestionException(string message) : Exception(message);
 }
