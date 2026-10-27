@@ -53,6 +53,7 @@ builder.Services.AddSingleton<IngestionQueue>();
 builder.Services.AddHostedService<IngestionWorker>();
 builder.Services.AddSingleton<VectorIndex>();
 builder.Services.AddScoped<RetrievalService>();
+builder.Services.AddScoped<AskService>();
 
 var app = builder.Build();
 // Configure the HTTP request pipeline.
