@@ -60,10 +60,10 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-app.MapDocumentEndpoints();
-
 app.UseCors();
 app.UseAuthorization();
+app.MapDocumentEndpoints();
+
 
 app.MapControllers();
 
