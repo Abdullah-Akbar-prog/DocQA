@@ -16,6 +16,10 @@
             public int ChunkOverlap { get; set; } = 200;
             public string DocumentPrefix { get; set; } = "search_document: ";
             public string QueryPrefix { get; set; } = "search_query: ";
+            public int TopK { get; set; } = 5;
+
+            /// <summary>Chunks farther than this are treated as irrelevant. Used from step 9.</summary>
+            public double MaxDistance { get; set; } = 0.7;
         }
     }
 }
