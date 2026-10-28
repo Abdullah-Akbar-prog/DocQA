@@ -1,5 +1,6 @@
 using DocQA;
 using DocQA.Data;
+using DocQA.Features.Ask;                 // NEW
 using DocQA.Features.Documents;
 using DocQA.Features.Search;
 using DocQA.Ingestion;
@@ -13,88 +14,57 @@ using static DocQA.Models.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Controllers and API documentation
+// Add services to the container.
+
 builder.Services.AddControllers();
+// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddDbContext<AppDbContext>
+(options => options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+builder.Services.AddOptions<StorageOptions>().BindConfiguration("Storage");
+builder.Services.ConfigureHttpJsonOptions(o =>
+    o.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+
 builder.Services.AddSwaggerGen();
 
-// Database
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlServer(
-        builder.Configuration.GetConnectionString("DefaultConnection")));
-
-// Application options
-builder.Services.AddOptions<StorageOptions>()
-    .BindConfiguration("Storage");
-
-builder.Services.AddOptions<OllamaOptions>()
-    .BindConfiguration("Ollama");
-
-builder.Services.AddOptions<RagOptions>()
-    .BindConfiguration("Rag");
-
-// JSON serialization
-builder.Services.ConfigureHttpJsonOptions(options =>
-    options.SerializerOptions.Converters.Add(
-        new JsonStringEnumConverter()));
-
-// CORS
 builder.Services.AddCors(options =>
-    options.AddDefaultPolicy(policy =>
-        policy
-            .WithOrigins(
-                builder.Configuration
-                    .GetSection("Cors:AllowedOrigins")
-                    .Get<string[]>() ?? [])
-            .AllowAnyHeader()
-            .AllowAnyMethod()));
+    options.AddDefaultPolicy(policy => policy
+        .WithOrigins(builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [])
+        .AllowAnyHeader()
+        .AllowAnyMethod()));
 
-// Ollama client factory
-static OllamaApiClient CreateOllama(
-    IServiceProvider sp,
-    string model)
+builder.Services.AddOptions<OllamaOptions>().BindConfiguration("Ollama");
+builder.Services.AddOptions<RagOptions>().BindConfiguration("Rag");
+
+// CHANGED: one helper builds the Ollama client for any model.
+static OllamaApiClient CreateOllama(IServiceProvider sp, string model)
 {
-    var options = sp
-        .GetRequiredService<IOptions<OllamaOptions>>()
-        .Value;
-
-    var httpClient = new HttpClient
+    var ollama = sp.GetRequiredService<IOptions<OllamaOptions>>().Value;
+    var http = new HttpClient
     {
-        BaseAddress = new Uri(options.Endpoint),
-        Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds)
+        BaseAddress = new Uri(ollama.Endpoint),
+        Timeout = TimeSpan.FromSeconds(ollama.TimeoutSeconds)
     };
-
-    return new OllamaApiClient(httpClient, model);
+    return new OllamaApiClient(http, model);
 }
 
-// Chat model
-builder.Services.AddSingleton<IChatClient>(sp =>
-    CreateOllama(
-        sp,
-        sp.GetRequiredService<IOptions<OllamaOptions>>()
-            .Value.ChatModel));
+// Only these two registrations know about Ollama. The rest of the code uses the interfaces.
+builder.Services.AddSingleton<IChatClient>(sp =>                                   // NEW
+    CreateOllama(sp, sp.GetRequiredService<IOptions<OllamaOptions>>().Value.ChatModel));
 
-// Embedding model
-builder.Services
-    .AddSingleton<IEmbeddingGenerator<string, Embedding<float>>>(sp =>
-        CreateOllama(
-            sp,
-            sp.GetRequiredService<IOptions<OllamaOptions>>()
-                .Value.EmbeddingModel));
+builder.Services.AddSingleton<IEmbeddingGenerator<string, Embedding<float>>>(sp => // CHANGED
+    CreateOllama(sp, sp.GetRequiredService<IOptions<OllamaOptions>>().Value.EmbeddingModel));
 
-// Document ingestion services
 builder.Services.AddSingleton<ITextExtractor, TextExtractor>();
 builder.Services.AddSingleton<IngestionQueue>();
 builder.Services.AddHostedService<IngestionWorker>();
-
-// RAG and search services
 builder.Services.AddSingleton<VectorIndex>();
 builder.Services.AddScoped<RetrievalService>();
 builder.Services.AddScoped<AskService>();
 
 var app = builder.Build();
-
-// HTTP request pipeline
+// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -104,10 +74,10 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 app.UseCors();
 app.UseAuthorization();
-
-// API endpoints
 app.MapDocumentEndpoints();
 app.MapSearchEndpoints();
+app.MapAskEndpoints();                    // NEW
+
 app.MapControllers();
 
 app.Run();

@@ -1,5 +1,7 @@
 ﻿using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
+using System.Runtime.CompilerServices;
+using System.Text;
 using static DocQA.Models.Options;
 
 namespace DocQA.Rag;
@@ -8,31 +10,73 @@ public sealed record SourceDto(int Id, Guid DocumentId, string FileName, int Chu
 
 public sealed record AskResult(string Answer, IReadOnlyList<SourceDto> Sources, long? InputTokens, long? OutputTokens);
 
+public abstract record StreamEvent;
+public sealed record SourcesEvent(IReadOnlyList<SourceDto> Sources) : StreamEvent;
+public sealed record TokenEvent(string Text) : StreamEvent;
+public sealed record DoneEvent(bool Declined) : StreamEvent;
+
 public sealed class AskService(RetrievalService retrieval, IChatClient chat, IOptions<RagOptions> options)
 {
+    private sealed record Prepared(List<RetrievedChunk> Relevant, List<ChatMessage>? Messages);
+
     public async Task<AskResult> AskAsync(string question, int? topK, CancellationToken ct)
+    {
+        var prepared = await PrepareAsync(question, topK, ct);
+        if (prepared.Messages is null)
+            return new AskResult(PromptBuilder.NoAnswer, [], null, null);
+
+        var response = await chat.GetResponseAsync(prepared.Messages, GenerationOptions(), ct);
+        var answer = response.Text.Trim();
+
+        return new AskResult(
+            answer,
+            IsDeclined(answer) ? [] : ToSources(prepared.Relevant),
+            response.Usage?.InputTokenCount,
+            response.Usage?.OutputTokenCount);
+    }
+
+    /// <summary>Sources first, then the answer token by token, then a final "done" event.</summary>
+    public async IAsyncEnumerable<StreamEvent> AskStreamAsync(
+        string question, int? topK, [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        var prepared = await PrepareAsync(question, topK, ct);
+
+        if (prepared.Messages is null)
+        {
+            yield return new SourcesEvent([]);
+            yield return new TokenEvent(PromptBuilder.NoAnswer);
+            yield return new DoneEvent(Declined: true);
+            yield break;
+        }
+
+        yield return new SourcesEvent(ToSources(prepared.Relevant));
+
+        var answer = new StringBuilder();
+        await foreach (var update in chat.GetStreamingResponseAsync(prepared.Messages, GenerationOptions(), ct))
+        {
+            if (string.IsNullOrEmpty(update.Text)) continue;
+            answer.Append(update.Text);
+            yield return new TokenEvent(update.Text);
+        }
+
+        yield return new DoneEvent(IsDeclined(answer.ToString().Trim()));
+    }
+
+    private async Task<Prepared> PrepareAsync(string question, int? topK, CancellationToken ct)
     {
         var found = await retrieval.SearchAsync(question, topK, ct);
         var relevant = found.Where(c => c.Distance <= options.Value.MaxDistance).ToList();
 
         // Honest failure: nothing close enough means we don't ask the model to guess.
-        if (relevant.Count == 0)
-            return new AskResult(PromptBuilder.NoAnswer, [], null, null);
-
-        var response = await chat.GetResponseAsync(
-            PromptBuilder.Build(question, relevant),
-            new ChatOptions { Temperature = 0.1f }, // low temperature = factual, repeatable answers
-            ct);
-
-        var answer = response.Text.Trim();
-        var declined = answer.StartsWith(PromptBuilder.NoAnswer, StringComparison.OrdinalIgnoreCase);
-
-        return new AskResult(
-            answer,
-            declined ? [] : ToSources(relevant), // no sources when the model itself said "I don't know"
-            response.Usage?.InputTokenCount,
-            response.Usage?.OutputTokenCount);
+        return relevant.Count == 0
+            ? new Prepared(relevant, null)
+            : new Prepared(relevant, PromptBuilder.Build(question, relevant));
     }
+
+    private static ChatOptions GenerationOptions() => new() { Temperature = 0.1f };
+
+    private static bool IsDeclined(string answer) =>
+        answer.StartsWith(PromptBuilder.NoAnswer, StringComparison.OrdinalIgnoreCase);
 
     private static List<SourceDto> ToSources(IReadOnlyList<RetrievedChunk> chunks) =>
         chunks
