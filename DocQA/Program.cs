@@ -1,8 +1,5 @@
 using DocQA;
 using DocQA.Data;
-using DocQA.Features.Ask;                 // NEW
-using DocQA.Features.Documents;
-using DocQA.Features.Search;
 using DocQA.Ingestion;
 using DocQA.Rag;
 using Microsoft.EntityFrameworkCore;
@@ -14,19 +11,17 @@ using static DocQA.Models.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
+// CHANGED: the enum-as-string setting moves here, because controllers have their own JSON options.
+builder.Services.AddControllers()
+    .AddJsonOptions(o => o.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
-builder.Services.AddControllers();
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
+
 builder.Services.AddDbContext<AppDbContext>
 (options => options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 builder.Services.AddOptions<StorageOptions>().BindConfiguration("Storage");
-builder.Services.ConfigureHttpJsonOptions(o =>
-    o.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
-
-builder.Services.AddSwaggerGen();
 
 builder.Services.AddCors(options =>
     options.AddDefaultPolicy(policy => policy
@@ -37,7 +32,6 @@ builder.Services.AddCors(options =>
 builder.Services.AddOptions<OllamaOptions>().BindConfiguration("Ollama");
 builder.Services.AddOptions<RagOptions>().BindConfiguration("Rag");
 
-// CHANGED: one helper builds the Ollama client for any model.
 static OllamaApiClient CreateOllama(IServiceProvider sp, string model)
 {
     var ollama = sp.GetRequiredService<IOptions<OllamaOptions>>().Value;
@@ -50,10 +44,10 @@ static OllamaApiClient CreateOllama(IServiceProvider sp, string model)
 }
 
 // Only these two registrations know about Ollama. The rest of the code uses the interfaces.
-builder.Services.AddSingleton<IChatClient>(sp =>                                   // NEW
+builder.Services.AddSingleton<IChatClient>(sp =>
     CreateOllama(sp, sp.GetRequiredService<IOptions<OllamaOptions>>().Value.ChatModel));
 
-builder.Services.AddSingleton<IEmbeddingGenerator<string, Embedding<float>>>(sp => // CHANGED
+builder.Services.AddSingleton<IEmbeddingGenerator<string, Embedding<float>>>(sp =>
     CreateOllama(sp, sp.GetRequiredService<IOptions<OllamaOptions>>().Value.EmbeddingModel));
 
 builder.Services.AddSingleton<ITextExtractor, TextExtractor>();
@@ -64,7 +58,7 @@ builder.Services.AddScoped<RetrievalService>();
 builder.Services.AddScoped<AskService>();
 
 var app = builder.Build();
-// Configure the HTTP request pipeline.
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -74,10 +68,8 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 app.UseCors();
 app.UseAuthorization();
-app.MapDocumentEndpoints();
-app.MapSearchEndpoints();
-app.MapAskEndpoints();                    // NEW
 
+// CHANGED: the three app.Map...Endpoints() lines are gone. Controllers are found automatically.
 app.MapControllers();
 
 app.Run();
