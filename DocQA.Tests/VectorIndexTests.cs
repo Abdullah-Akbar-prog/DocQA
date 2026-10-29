@@ -4,8 +4,10 @@ namespace DocQA.Tests;
 
 public class VectorIndexTests
 {
-    private static VectorEntry Entry(string name, params float[] vector) =>
-        new(Guid.NewGuid(), Guid.NewGuid(), name, 0, VectorMath.Normalize(vector));
+    private static VectorEntry EntryFor(string userId, string name, params float[] vector) =>
+        new(Guid.NewGuid(), Guid.NewGuid(), userId, name, 0, VectorMath.Normalize(vector));
+
+    private static VectorEntry Entry(string name, params float[] vector) => EntryFor("u1", name, vector);
 
     private static float[] Query(params float[] vector) => VectorMath.Normalize(vector);
 
@@ -14,7 +16,7 @@ public class VectorIndexTests
     {
         var entries = new[] { Entry("far", 0, 1), Entry("near", 1, 0.1f), Entry("exact", 1, 0) };
 
-        var hits = VectorIndex.Rank(entries, Query(1, 0), k: 3);
+        var hits = VectorIndex.Rank(entries, Query(1, 0), k: 3, userId: "u1");
 
         Assert.Equal(new[] { "exact", "near", "far" }, hits.Select(h => h.Entry.FileName));
     }
@@ -24,7 +26,7 @@ public class VectorIndexTests
     {
         var entries = Enumerable.Range(0, 5).Select(i => Entry($"e{i}", 1, i)).ToArray();
 
-        var hits = VectorIndex.Rank(entries, Query(1, 0), k: 2);
+        var hits = VectorIndex.Rank(entries, Query(1, 0), k: 2, userId: "u1");
 
         Assert.Equal(2, hits.Count);
     }
@@ -35,7 +37,8 @@ public class VectorIndexTests
         var hits = VectorIndex.Rank(
             [Entry("same", 2, 0), Entry("orthogonal", 0, 3), Entry("opposite", -1, 0)],
             Query(1, 0),
-            k: 3);
+            k: 3,
+            userId: "u1");
 
         Assert.Equal(0.0, hits[0].Distance, 5);
         Assert.Equal(1.0, hits[1].Distance, 5);
@@ -47,15 +50,26 @@ public class VectorIndexTests
     {
         var entries = new[] { Entry("ok", 1, 0), Entry("wrong-size", 1, 0, 0) };
 
-        var hits = VectorIndex.Rank(entries, Query(1, 0), k: 5);
+        var hits = VectorIndex.Rank(entries, Query(1, 0), k: 5, userId: "u1");
 
         Assert.Single(hits);
         Assert.Equal("ok", hits[0].Entry.FileName);
     }
 
     [Fact]
+    public void Other_users_entries_are_never_returned()
+    {
+        var entries = new[] { EntryFor("alice", "mine", 1, 0), EntryFor("bob", "theirs", 1, 0) };
+
+        var hits = VectorIndex.Rank(entries, Query(1, 0), k: 5, userId: "alice");
+
+        Assert.Single(hits);
+        Assert.Equal("mine", hits[0].Entry.FileName);
+    }
+
+    [Fact]
     public void Empty_index_returns_no_hits()
     {
-        Assert.Empty(VectorIndex.Rank([], Query(1, 0), k: 5));
+        Assert.Empty(VectorIndex.Rank([], Query(1, 0), k: 5, userId: "u1"));
     }
 }
