@@ -1,4 +1,5 @@
 ﻿using DocQA.Data;
+using DocQA.Dto;
 using DocQA.Ingestion;
 using DocQA.Models;
 using DocQA.Rag;
