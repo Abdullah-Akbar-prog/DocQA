@@ -1,14 +1,17 @@
-﻿using DocQA.Data;
+﻿using DocQA.Auth;
+using DocQA.Data;
 using DocQA.Dto;
 using DocQA.Ingestion;
 using DocQA.Models;
 using DocQA.Rag;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
 namespace DocQA.Controllers;
 
+[Authorize]
 [ApiController]
 [Route("api/documents")]
 public class DocumentsController(
@@ -39,7 +42,6 @@ public class DocumentsController(
         var uploadDir = Path.Combine(env.ContentRootPath, settings.UploadPath);
         Directory.CreateDirectory(uploadDir);
 
-        // The stored name is our own GUID. The client's file name is only kept for display.
         var id = Guid.NewGuid();
         var storagePath = Path.Combine(uploadDir, $"{id}{extension}");
 
@@ -48,7 +50,13 @@ public class DocumentsController(
             await file.CopyToAsync(stream, ct);
         }
 
-        var doc = new Document { Id = id, FileName = DisplayName(file.FileName), StoragePath = storagePath };
+        var doc = new Document
+        {
+            Id = id,
+            UserId = User.GetUserId(),
+            FileName = DisplayName(file.FileName),
+            StoragePath = storagePath
+        };
         db.Documents.Add(doc);
 
         try
@@ -57,7 +65,7 @@ public class DocumentsController(
         }
         catch
         {
-            System.IO.File.Delete(storagePath); // don't leave an orphan file if the database write fails
+            System.IO.File.Delete(storagePath);
             throw;
         }
 
@@ -66,19 +74,26 @@ public class DocumentsController(
     }
 
     [HttpGet]
-    public async Task<ActionResult<List<DocumentDto>>> List(CancellationToken ct) =>
-        await db.Documents
+    public async Task<ActionResult<List<DocumentDto>>> List(CancellationToken ct)
+    {
+        var userId = User.GetUserId();
+
+        return await db.Documents
             .AsNoTracking()
+            .Where(d => d.UserId == userId)
             .OrderByDescending(d => d.CreatedAt)
             .Select(d => new DocumentDto(d.Id, d.FileName, d.Status, d.ChunkCount, d.Error, d.CreatedAt))
             .ToListAsync(ct);
+    }
 
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<DocumentDto>> Get(Guid id, CancellationToken ct)
     {
+        var userId = User.GetUserId();
+
         var doc = await db.Documents
             .AsNoTracking()
-            .Where(d => d.Id == id)
+            .Where(d => d.Id == id && d.UserId == userId)
             .Select(d => new DocumentDto(d.Id, d.FileName, d.Status, d.ChunkCount, d.Error, d.CreatedAt))
             .FirstOrDefaultAsync(ct);
 
@@ -89,7 +104,9 @@ public class DocumentsController(
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
     {
-        var doc = await db.Documents.FirstOrDefaultAsync(d => d.Id == id, ct);
+        var userId = User.GetUserId();
+
+        var doc = await db.Documents.FirstOrDefaultAsync(d => d.Id == id && d.UserId == userId, ct);
         if (doc is null) return NotFound();
 
         db.Documents.Remove(doc); // chunks are removed by the cascade
@@ -104,7 +121,9 @@ public class DocumentsController(
     [HttpGet("{id:guid}/preview")]
     public async Task<IActionResult> Preview(Guid id, CancellationToken ct)
     {
-        var doc = await db.Documents.AsNoTracking().FirstOrDefaultAsync(d => d.Id == id, ct);
+        var userId = User.GetUserId();
+
+        var doc = await db.Documents.AsNoTracking().FirstOrDefaultAsync(d => d.Id == id && d.UserId == userId, ct);
         if (doc is null) return NotFound();
 
         var text = await extractor.ExtractAsync(doc.StoragePath, Path.GetExtension(doc.StoragePath), ct);
@@ -125,7 +144,6 @@ public class DocumentsController(
         return name.Length > 260 ? name[..260] : name;
     }
 
-    // Checks the file's first bytes instead of trusting the extension.
     private static async Task<bool> LooksLikePdfAsync(IFormFile file, CancellationToken ct)
     {
         await using var stream = file.OpenReadStream();
