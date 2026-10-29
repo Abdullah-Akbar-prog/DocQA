@@ -21,5 +21,12 @@
             /// <summary>Chunks farther than this are treated as irrelevant. Used from step 9.</summary>
             public double MaxDistance { get; set; } = 0.7;
         }
+        public sealed class JwtOptions
+        {
+            public string Issuer { get; set; } = "DocQA";
+            public string Audience { get; set; } = "DocQA.Client";
+            public string Key { get; set; } = string.Empty;
+            public int ExpiryMinutes { get; set; } = 60;
+        }
     }
 }
