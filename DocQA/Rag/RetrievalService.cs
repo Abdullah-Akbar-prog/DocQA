@@ -14,7 +14,7 @@ public sealed class RetrievalService(
     IEmbeddingGenerator<string, Embedding<float>> embedder,
     IOptions<RagOptions> options)
 {
-    public async Task<IReadOnlyList<RetrievedChunk>> SearchAsync(string question, int? topK, CancellationToken ct)
+    public async Task<IReadOnlyList<RetrievedChunk>> SearchAsync(string question, string userId, int? topK, CancellationToken ct)
     {
         var rag = options.Value;
         var k = Math.Clamp(topK ?? rag.TopK, 1, 20);
@@ -22,7 +22,7 @@ public sealed class RetrievalService(
         var embeddings = await embedder.GenerateAsync(new[] { rag.QueryPrefix + question }, cancellationToken: ct);
 
         // 1. Find the closest chunks in memory (ids and distances only).
-        var hits = await index.SearchAsync(embeddings[0].Vector, k, ct);
+        var hits = await index.SearchAsync(embeddings[0].Vector, k, userId, ct);
         if (hits.Count == 0) return [];
 
         // 2. Load the text of just those chunks from SQL Server.

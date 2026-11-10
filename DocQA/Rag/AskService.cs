@@ -19,9 +19,9 @@ public sealed class AskService(RetrievalService retrieval, IChatClient chat, IOp
 {
     private sealed record Prepared(List<RetrievedChunk> Relevant, List<ChatMessage>? Messages);
 
-    public async Task<AskResult> AskAsync(string question, int? topK, CancellationToken ct)
+    public async Task<AskResult> AskAsync(string question, int? topK, string userId, CancellationToken ct)
     {
-        var prepared = await PrepareAsync(question, topK, ct);
+        var prepared = await PrepareAsync(question, topK, userId, ct);
         if (prepared.Messages is null)
             return new AskResult(PromptBuilder.NoAnswer, [], null, null);
 
@@ -37,9 +37,9 @@ public sealed class AskService(RetrievalService retrieval, IChatClient chat, IOp
 
     /// <summary>Sources first, then the answer token by token, then a final "done" event.</summary>
     public async IAsyncEnumerable<StreamEvent> AskStreamAsync(
-        string question, int? topK, [EnumeratorCancellation] CancellationToken ct = default)
+        string question, int? topK, string userId, [EnumeratorCancellation] CancellationToken ct = default)
     {
-        var prepared = await PrepareAsync(question, topK, ct);
+        var prepared = await PrepareAsync(question, topK, userId, ct);
 
         if (prepared.Messages is null)
         {
@@ -62,9 +62,9 @@ public sealed class AskService(RetrievalService retrieval, IChatClient chat, IOp
         yield return new DoneEvent(IsDeclined(answer.ToString().Trim()));
     }
 
-    private async Task<Prepared> PrepareAsync(string question, int? topK, CancellationToken ct)
+    private async Task<Prepared> PrepareAsync(string question, string userId, int? topK, CancellationToken ct)
     {
-        var found = await retrieval.SearchAsync(question, topK, ct);
+        var found = await retrieval.SearchAsync(question, topK, userId, ct);
         var relevant = found.Where(c => c.Distance <= options.Value.MaxDistance).ToList();
 
         // Honest failure: nothing close enough means we don't ask the model to guess.
