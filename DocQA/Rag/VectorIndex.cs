@@ -8,12 +8,6 @@ public sealed record VectorEntry(Guid ChunkId, Guid DocumentId, string FileName,
 
 public sealed record VectorHit(VectorEntry Entry, double Distance);
 
-/// <summary>
-/// In-memory nearest-neighbour search over every chunk embedding (brute-force cosine distance).
-/// Loaded lazily from SQL Server on first use, and reloaded after documents are added or deleted.
-/// Fine for tens of thousands of chunks. Beyond that (or with several API instances), move to a
-/// real vector store. Only this class would need to change.
-/// </summary>
 public sealed class VectorIndex(IServiceScopeFactory scopes, ILogger<VectorIndex> logger)
 {
     private readonly SemaphoreSlim _loadLock = new(1, 1);
@@ -77,28 +71,4 @@ public sealed class VectorIndex(IServiceScopeFactory scopes, ILogger<VectorIndex
             _loadLock.Release();
         }
     }
-
-    // 1) The record gets a UserId (after DocumentId)
-    public sealed record VectorEntry(
-        Guid ChunkId, Guid DocumentId, string UserId, string FileName, int ChunkIndex, float[] Vector);
-
-    // 2) SearchAsync takes the user
-    public async Task<IReadOnlyList<VectorHit>> SearchAsync(
-        ReadOnlyMemory<float> query, int k, string userId, CancellationToken ct)
-    {
-        var entries = _entries ?? await LoadAsync(ct);
-        return Rank(entries, VectorMath.Normalize(query.ToArray()), k, userId);
-    }
-
-    // 3) Rank filters by user (this is the line that keeps users apart)
-    public static IReadOnlyList<VectorHit> Rank(
-        IEnumerable<VectorEntry> entries, float[] normalizedQuery, int k, string userId) =>
-        entries
-            .Where(e => e.UserId == userId && e.Vector.Length == normalizedQuery.Length)
-            .Select(e => new VectorHit(e, Math.Clamp(1.0 - VectorMath.Dot(e.Vector, normalizedQuery), 0.0, 2.0)))
-            .OrderBy(h => h.Distance)
-            .Take(k)
-            .ToList();
-}
-
 }
