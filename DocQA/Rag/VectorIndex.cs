@@ -4,7 +4,8 @@ using System.Diagnostics;
 
 namespace DocQA.Rag;
 
-public sealed record VectorEntry(Guid ChunkId, Guid DocumentId, string FileName, int ChunkIndex, float[] Vector);
+public sealed record VectorEntry(
+    Guid ChunkId, Guid DocumentId, string UserId, string FileName, int ChunkIndex, float[] Vector);
 
 public sealed record VectorHit(VectorEntry Entry, double Distance);
 
@@ -21,16 +22,18 @@ public sealed class VectorIndex(IServiceScopeFactory scopes, ILogger<VectorIndex
         _entries = null;
     }
 
-    public async Task<IReadOnlyList<VectorHit>> SearchAsync(ReadOnlyMemory<float> query, int k, string userId, CancellationToken ct)
+    public async Task<IReadOnlyList<VectorHit>> SearchAsync(
+        ReadOnlyMemory<float> query, int k, string userId, CancellationToken ct)
     {
         var entries = _entries ?? await LoadAsync(ct);
         return Rank(entries, VectorMath.Normalize(query.ToArray()), k, userId);
     }
 
     /// <summary>The ranking logic on its own, so it can be unit tested without a database.</summary>
-    public static IReadOnlyList<VectorHit> Rank(IEnumerable<VectorEntry> entries, float[] normalizedQuery, int k) =>
+    public static IReadOnlyList<VectorHit> Rank(
+        IEnumerable<VectorEntry> entries, float[] normalizedQuery, int k, string userId) =>
         entries
-            .Where(e => e.Vector.Length == normalizedQuery.Length)
+            .Where(e => e.UserId == userId && e.Vector.Length == normalizedQuery.Length) // keeps users apart
             .Select(e => new VectorHit(e, Math.Clamp(1.0 - VectorMath.Dot(e.Vector, normalizedQuery), 0.0, 2.0)))
             .OrderBy(h => h.Distance)
             .Take(k)
@@ -51,12 +54,12 @@ public sealed class VectorIndex(IServiceScopeFactory scopes, ILogger<VectorIndex
 
             var rows = await db.Chunks
                 .AsNoTracking()
-                .Select(c => new { c.Id, c.DocumentId, c.Document.FileName, c.Index, c.Embedding })
+                .Select(c => new { c.Id, c.DocumentId, c.Document.UserId, c.Document.FileName, c.Index, c.Embedding })
                 .ToListAsync(ct);
 
             var loaded = rows
                 .Select(r => new VectorEntry(
-                    r.Id, r.DocumentId, r.FileName, r.Index,
+                    r.Id, r.DocumentId, r.UserId, r.FileName, r.Index,
                     VectorMath.Normalize(VectorMath.ToFloats(r.Embedding))))
                 .ToArray();
 

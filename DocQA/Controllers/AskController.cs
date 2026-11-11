@@ -13,11 +13,11 @@ public class AskController(AskService ask, ILogger<AskController> logger) : Cont
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
     [HttpPost]
-    public async Task<ActionResult<AskResult>> Ask(AskRequest request, CancellationToken ct)
+    public async Task<ActionResult<AskResult>> Ask(AskRequest request, string userId, CancellationToken ct)
     {
         try
         {
-            return await ask.AskAsync(request.Question, request.TopK, ct);
+            return await ask.AskAsync(request.Question, request.TopK, userId, ct);
         }
         catch (HttpRequestException)
         {
