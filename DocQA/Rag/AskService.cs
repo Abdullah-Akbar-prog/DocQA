@@ -21,7 +21,7 @@ public sealed class AskService(RetrievalService retrieval, IChatClient chat, IOp
 
     public async Task<AskResult> AskAsync(string question, int? topK, string userId, CancellationToken ct)
     {
-        var prepared = await PrepareAsync(question, topK, userId, ct);
+        var prepared = await PrepareAsync(question, userId, topK, ct);
         if (prepared.Messages is null)
             return new AskResult(PromptBuilder.NoAnswer, [], null, null);
 
@@ -39,7 +39,7 @@ public sealed class AskService(RetrievalService retrieval, IChatClient chat, IOp
     public async IAsyncEnumerable<StreamEvent> AskStreamAsync(
         string question, int? topK, string userId, [EnumeratorCancellation] CancellationToken ct = default)
     {
-        var prepared = await PrepareAsync(question, topK, userId, ct);
+        var prepared = await PrepareAsync(question, userId, topK, ct);
 
         if (prepared.Messages is null)
         {
@@ -64,7 +64,7 @@ public sealed class AskService(RetrievalService retrieval, IChatClient chat, IOp
 
     private async Task<Prepared> PrepareAsync(string question, string userId, int? topK, CancellationToken ct)
     {
-        var found = await retrieval.SearchAsync(question, topK, userId, ct);
+        var found = await retrieval.SearchAsync(question, userId, topK, ct);
         var relevant = found.Where(c => c.Distance <= options.Value.MaxDistance).ToList();
 
         // Honest failure: nothing close enough means we don't ask the model to guess.

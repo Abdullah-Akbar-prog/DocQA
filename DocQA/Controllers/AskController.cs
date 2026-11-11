@@ -1,4 +1,5 @@
-﻿using DocQA.Models;
+﻿using DocQA.Auth;
+using DocQA.Models;
 using DocQA.Rag;
 using Microsoft.AspNetCore.Mvc;
 using System.Text.Json;
@@ -42,7 +43,8 @@ public class AskController(AskService ask, ILogger<AskController> logger) : Cont
 
         try
         {
-            await foreach (var evt in ask.AskStreamAsync(request.Question, request.TopK, ct))
+            var userId = User.GetUserId();
+            await foreach (var evt in ask.AskStreamAsync(request.Question, request.TopK, userId, ct))
             {
                 switch (evt)
                 {

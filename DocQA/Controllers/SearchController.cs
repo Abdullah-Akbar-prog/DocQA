@@ -11,5 +11,5 @@ public class SearchController(RetrievalService retrieval) : ControllerBase
 {
     [HttpPost]
     public async Task<ActionResult<IReadOnlyList<RetrievedChunk>>> Search(AskRequest request, CancellationToken ct) =>
-        Ok(await retrieval.SearchAsync(request.Question, request.TopK, User.GetUserId(), ct));
+        Ok(await retrieval.SearchAsync(request.Question, User.GetUserId(), request.TopK, ct));
 }

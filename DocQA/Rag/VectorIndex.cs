@@ -21,10 +21,10 @@ public sealed class VectorIndex(IServiceScopeFactory scopes, ILogger<VectorIndex
         _entries = null;
     }
 
-    public async Task<IReadOnlyList<VectorHit>> SearchAsync(ReadOnlyMemory<float> query, int k, CancellationToken ct)
+    public async Task<IReadOnlyList<VectorHit>> SearchAsync(ReadOnlyMemory<float> query, int k, string userId, CancellationToken ct)
     {
         var entries = _entries ?? await LoadAsync(ct);
-        return Rank(entries, VectorMath.Normalize(query.ToArray()), k);
+        return Rank(entries, VectorMath.Normalize(query.ToArray()), k, userId);
     }
 
     /// <summary>The ranking logic on its own, so it can be unit tested without a database.</summary>
